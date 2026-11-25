@@ -1,0 +1,83 @@
+Step-by-Step Edge-Case Analysis
+Let's walk through each invalid input case and see what happens if it slips past validation in an Expense Splitter:
+
+Negative amount (e.g., -100)
+
+What goes wrong: Subtracting or adding a negative expense flips who owes whom and distorts balances or total spend.
+
+Check needed: Reject amounts less than 0 by raising a ValueError.
+
+Zero amount (e.g., 0 or 0.0)
+
+What goes wrong: A zero-rupee expense adds clutter to expense history and split calculations without representing an actual transaction.
+
+Check needed: Reject amounts equal to 0 as well (combining into amount <= 0).
+
+Payer not in the participant list (e.g., "Unknown")
+
+What goes wrong: If a balance dictionary or split ledger looks up expense["payer"], a missing participant causes a KeyError or silently creates a phantom participant who wasn't part of the group.
+
+Check needed: Verify payer in participants and raise a ValueError if missing.
+
+Amount entered as text instead of a number (e.g., "abc" or "900")
+
+What goes wrong: Comparing a string with <= 0 raises a TypeError, and formatting with :.2f also fails with a ValueError/TypeError. Also note a subtle Python gotcha: isinstance(True, int) is True, so booleans should be excluded explicitly (isinstance(amount, bool)).
+
+Check needed: Ensure amount is an int or float (and not a bool) before running numeric comparisons. (Also guard against math.isnan(amount) or math.isinf(amount) if floats are used.)
+
+Validation Function Implementation
+This standalone validator keeps changes strictly to expense validation without touching display_expenses or split logic:import math
+
+
+def validate_expense(expense: dict, participants: list[str]) -> bool:
+    """Validate an expense dictionary against allowed participants and numeric rules."""
+    if not isinstance(expense, dict):
+        raise ValueError("Expense must be a dictionary.")
+
+    amount = expense.get("amount")
+    payer = expense.get("payer")
+
+    # 1 & 4: Check type first so text or booleans fail cleanly before numeric comparisons
+    if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+        raise ValueError("Expense amount must be a valid number.")
+
+    if math.isnan(amount) or math.isinf(amount):
+        raise ValueError("Expense amount must be a finite number.")
+
+    # 1 & 2: Reject negative or zero amounts
+    if amount <= 0:
+        raise ValueError("Expense amount must be greater than zero.")
+
+    # 3: Ensure payer is part of the group
+    if payer not in participants:
+        raise ValueError(f"Payer '{payer}' is not in the participant list.")
+
+    return True
+EDGE CASE TEST :
+participants = ["Asha", "Rahul", "Priya"]
+
+# Valid expense
+valid_expense = {"description": "Dinner", "amount": 900, "payer": "Asha"}
+assert validate_expense(valid_expense, participants) is True
+
+# Invalid edge cases
+edge_case_expenses = [
+    ("Negative amount", {"description": "Snack", "amount": -100, "payer": "Asha"}),
+    ("Zero amount", {"description": "Water", "amount": 0, "payer": "Rahul"}),
+    ("Unknown payer", {"description": "Taxi", "amount": 300, "payer": "Vikram"}),
+    ("Text amount", {"description": "Groceries", "amount": "125.50", "payer": "Priya"}),
+    ("Boolean amount", {"description": "Coffee", "amount": True, "payer": "Asha"}),
+]
+
+for label, bad_expense in edge_case_expenses:
+    try:
+        validate_expense(bad_expense, participants)
+        print(f"[FAIL] {label}: expected ValueError")
+    except ValueError as exc:
+        print(f"[PASS] {label}: {exc}") 
+EXPECTED OUTPUT :
+[PASS] Negative amount: Expense amount must be greater than zero.
+[PASS] Zero amount: Expense amount must be greater than zero.
+[PASS] Unknown payer: Payer 'Vikram' is not in the participant list.
+[PASS] Text amount: Expense amount must be a valid number.
+[PASS] Boolean amount: Expense amount must be a valid number.
